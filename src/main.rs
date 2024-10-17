@@ -71,5 +71,5 @@ fn main() {
     renderer.translate(0f32, 17f32);
 
 
-    unsafe { renderer.save(std::path::Path::new("output.png".into())); }
+    // unsafe { renderer.save(std::path::Path::new("output.png".into())); }
 }
