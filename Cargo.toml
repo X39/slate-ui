@@ -1,0 +1,12 @@
+[package]
+name = "slate-ui"                                           # the name of the package
+version = "0.1.0"                                           # the current version, obeying semver
+authors = ["X39 <marco@silipo.de>"]
+edition = "2018"
+
+[features]
+default = ["skia"]
+skia = ["skia-safe"]
+
+[dependencies]
+skia-safe = { version = "0.78.2", optional = true }
