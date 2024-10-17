@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn test_blue() {
-        let color = Color { rgba: 0x0000AA00 }; // Blue component is 255
+        let color = Color { rgba: 0x0000FF00 }; // Blue component is 255
         assert_eq!(color.blue(), 0xFF);
 
         let color = Color { rgba: 0x00008000 }; // Blue component is 128
