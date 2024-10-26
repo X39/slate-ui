@@ -1,5 +1,5 @@
 use std::cmp::min;
-use crate::abstraction::{Component, Visual};
+use crate::abstraction::{Component, Renderer, Visual};
 use crate::color::Color;
 use crate::data::{Orientation, Size};
 use crate::visuals;
@@ -75,9 +75,7 @@ impl Component for ScrollBar {
         self.size
     }
 
-    fn render<F>(&self, mut dispatch: F)
-    where
-        F: FnMut(&dyn Visual),
+    fn render(&self, renderer: &mut Renderer)
     {
         let thickness = self.render_thickness;
         let bar_length = self.bar_length;
@@ -87,31 +85,31 @@ impl Component for ScrollBar {
                 let length = self.size.width;
 
                 // Thumb Left
-                dispatch(&visuals::Rectangle { y: 0f32, x: 0f32, height: thickness, width: thickness, fill: Color::GRAY });
+                visuals::Rectangle { y: 0f32, x: 0f32, height: thickness, width: thickness, fill: Color::GRAY }.draw(renderer);
 
                 // Thumb Right
-                dispatch(&visuals::Rectangle { y: 0f32, x: length - thickness, height: thickness, width: thickness, fill: Color::GRAY });
+                &visuals::Rectangle { y: 0f32, x: length - thickness, height: thickness, width: thickness, fill: Color::GRAY }.draw(renderer);
 
                 // Scroll Area
-                dispatch(&visuals::Rectangle { y: 0f32, x: thickness, height: thickness, width: length - thickness - thickness, fill: Color::LIGHT_GRAY });
+                &visuals::Rectangle { y: 0f32, x: thickness, height: thickness, width: length - thickness - thickness, fill: Color::LIGHT_GRAY }.draw(renderer);
 
                 // Scroll Bar
-                dispatch(&visuals::Rectangle { y: 0f32, x: bar_offset + thickness, height: thickness, width: bar_length, fill: Color::DARK_GRAY });
+                &visuals::Rectangle { y: 0f32, x: bar_offset + thickness, height: thickness, width: bar_length, fill: Color::DARK_GRAY }.draw(renderer);
             }
             Orientation::Vertical => {
                 let length = self.size.height;
 
                 // Thumb Top
-                dispatch(&visuals::Rectangle { x: 0f32, y: 0f32, width: thickness, height: thickness, fill: Color::AQUA });
+                &visuals::Rectangle { x: 0f32, y: 0f32, width: thickness, height: thickness, fill: Color::AQUA }.draw(renderer);
 
                 // Thumb Bottom
-                dispatch(&visuals::Rectangle { x: 0f32, y: length - thickness, width: thickness, height: thickness, fill: Color::BEIGE });
+                &visuals::Rectangle { x: 0f32, y: length - thickness, width: thickness, height: thickness, fill: Color::BEIGE }.draw(renderer);
 
                 // Scroll Area
-                dispatch(&visuals::Rectangle { x: 0f32, y: thickness, width: thickness, height: length - thickness - thickness, fill: Color::GRAY });
+                &visuals::Rectangle { x: 0f32, y: thickness, width: thickness, height: length - thickness - thickness, fill: Color::GRAY }.draw(renderer);
 
                 // Scroll Bar
-                dispatch(&visuals::Rectangle { x: 0f32, y: bar_offset, width: thickness, height: bar_length, fill: Color::GOLD });
+                &visuals::Rectangle { x: 0f32, y: bar_offset, width: thickness, height: bar_length, fill: Color::GOLD }.draw(renderer);
             }
         }
     }

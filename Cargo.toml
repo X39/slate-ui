@@ -5,18 +5,12 @@ authors = ["X39 <marco@silipo.de>"]
 edition = "2018"
 
 [features]
-default = ["skia-d3d"]
-skia-d3d = ["skia-safe", "skia-safe/default", "skia-safe/d3d", "windows"]
+default = ["skia-gl"]
 skia-gl = ["skia-safe", "skia-safe/default", "skia-safe/gl"]
 
 [dependencies]
 skia-safe = { version = "0.78.2", optional = true, features = ["default"] }
-windows = { version = "0.58.0", features = [
-    "Win32",
-    "Win32_Graphics",
-    "Win32_Graphics_Dxgi",
-    "Win32_Graphics_Direct3D12",
-    "Win32_Graphics_Direct3D",
-    "Win32_Foundation",
-    "Win32_Graphics_Dxgi_Common",
-], optional = true }
+winit = {version = "0.30.5"}
+config = "0.14.1"
+log = "0.4.22"
+simple_logger = "5.0.0"

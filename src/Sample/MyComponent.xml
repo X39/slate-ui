@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <Component>
     <TextBlock Text="{Binding my_property}"/>
+    <Button onClick="{Callback on_button_clicked}"/>
 </Component>

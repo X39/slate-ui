@@ -76,7 +76,9 @@ pub trait Component {
     /// # Note to implementors
     /// With this must be fast, i, the doc author, do mean that this must be fast.
     /// This is the "rendering loop".
-    fn render<F>(&self, dispatch: F)
-    where
-        F: FnMut(&dyn Visual);
+    fn render(&self, renderer: &mut dyn Renderer);
+}
+
+pub trait ContainerComponent : Component {
+    fn add_child(&mut self, child: Box<dyn Component>);
 }
