@@ -1,4 +1,9 @@
+use crate::abstraction::{RenderSurface, Renderer};
+use crate::renderers::SkiaRenderer;
+use crate::window::AppWindow;
 use log::{error, info, log, warn};
+use std::error::Error;
+use std::fmt::{Display, Formatter};
 use winit::application::ApplicationHandler;
 use winit::error::{EventLoopError, OsError};
 use winit::event::{DeviceEvent, DeviceId, StartCause, WindowEvent};
@@ -8,29 +13,59 @@ use winit::window::{Window, WindowAttributes, WindowId};
 
 #[derive(Debug)]
 pub enum AppErrors {
+    Error(Box<dyn Error>),
     WinitEventLoopError(EventLoopError),
-    WinitOsError(OsError),
     MaxWindowCountReached(usize),
     WindowEventIssuedButNoAssociatedWindowCouldBeFound,
+    RenderSurfaceCreationFailed(Box<dyn Error>),
 }
+
+impl Display for AppErrors {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AppErrors::Error(err) => write!(f, "Error ({:?})", err),
+            AppErrors::WinitEventLoopError(err) => write!(f, "Winit event loop error ({:?})", err),
+            AppErrors::MaxWindowCountReached(err) => {
+                write!(f, "Max window count reached ({})", err)
+            }
+            AppErrors::WindowEventIssuedButNoAssociatedWindowCouldBeFound => write!(
+                f,
+                "Window event issued but no associated window could be found"
+            ),
+            AppErrors::RenderSurfaceCreationFailed(err) => {
+                write!(f, "Render surface creation failed ({})", *err)
+            }
+        }
+    }
+}
+
+impl Error for AppErrors {}
+
 #[derive(Debug)]
 pub enum AppEvents {}
 
 pub struct AppBuilder {}
 
+type EventLoopAttributes = AppEvents;
+
 impl AppBuilder {
     pub fn new() -> Self {
         AppBuilder {}
     }
-    pub fn run(self) -> Result<(), AppErrors> {
-        let event_loop = match EventLoop::with_user_event().build() {
+    pub fn run<
+        F: Fn(&ActiveEventLoop) -> Result<Box<dyn RenderSurface>, Box<dyn Error>> + 'static,
+    >(
+        &self,
+        f: F,
+    ) -> Result<App, AppErrors> {
+        let event_loop = match EventLoop::<EventLoopAttributes>::with_user_event().build() {
             Ok(d) => d,
             Err(e) => return Err(AppErrors::WinitEventLoopError(e)),
         };
-        let mut app = App::new();
+        let mut app = App::new(f);
         match event_loop.run_app(&mut app) {
             Ok(_) => match app.last_error {
-                None => Ok(()),
+                None => Ok(app),
                 Some(e) => Err(e),
             },
             Err(e) => Err(AppErrors::WinitEventLoopError(e)),
@@ -43,20 +78,10 @@ pub struct AppWindowId {
     pub generation: usize,
 }
 pub struct App {
-    windows: Vec<(Option<WindowId>, Option<Window>, usize)>,
+    windows: Vec<AppWindow>,
     last_error: Option<AppErrors>,
-}
-
-impl App {
-    pub(crate) fn count_active_windows(&self) -> usize {
-        let mut count: usize = 0;
-        for window in &self.windows {
-            if window.0.is_some() {
-                count = count + 1;
-            }
-        }
-        return count;
-    }
+    surface_factory:
+        Box<dyn Fn(&ActiveEventLoop) -> Result<Box<dyn RenderSurface>, Box<dyn Error>>>,
 }
 
 enum AppFindWindowResult {
@@ -66,20 +91,39 @@ enum AppFindWindowResult {
 }
 
 impl App {
-    fn find_window(&self, window_id: WindowId) -> AppFindWindowResult {
+    fn new<F: Fn(&ActiveEventLoop) -> Result<Box<dyn RenderSurface>, Box<dyn Error>> + 'static>(
+        renderer_factory: F,
+    ) -> Self {
+        App {
+            windows: vec![],
+            last_error: None,
+            surface_factory: Box::new(renderer_factory),
+        }
+    }
+
+    pub(crate) fn count_active_windows(&self) -> usize {
+        let mut count: usize = 0;
+        for window in &self.windows {
+            if window.id.is_some() {
+                count = count + 1;
+            }
+        }
+        return count;
+    }
+    pub fn find_window(&self, window_id: WindowId) -> AppFindWindowResult {
         for (index, tuple) in self.windows.iter().enumerate() {
-            match tuple.0 {
+            match tuple.id {
                 None => {}
                 Some(tuple_window_id) => {
                     if tuple_window_id == window_id {
-                        return match tuple.1 {
+                        return match tuple.render_surface {
                             None => AppFindWindowResult::FoundButClosing(AppWindowId {
                                 index,
-                                generation: tuple.2,
+                                generation: tuple.generation,
                             }),
                             Some(_) => AppFindWindowResult::Found(AppWindowId {
                                 index,
-                                generation: tuple.2,
+                                generation: tuple.generation,
                             }),
                         };
                     }
@@ -88,9 +132,55 @@ impl App {
         }
         AppFindWindowResult::NotFound
     }
+    pub fn create_window(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+    ) -> Result<AppWindowId, AppErrors> {
+        let render_surface = match (self.surface_factory)(event_loop) {
+            Ok(d) => d,
+            Err(e) => return Err(AppErrors::RenderSurfaceCreationFailed(e)),
+        };
+
+        // Try to reuse old slot
+        let index = self.windows.len();
+        for i in 0..index {
+            match self.windows[i].id {
+                None => {
+                    let generation = self.windows[i].generation + 1;
+                    self.windows[i] = AppWindow::new(
+                        Some(render_surface.window_id()),
+                        Some(render_surface),
+                        generation,
+                    );
+                    self.windows[i].render();
+                    return Ok(AppWindowId {
+                        index: i,
+                        generation,
+                    });
+                }
+                Some(_) => {}
+            }
+        }
+
+        // Create new slot
+
+        // We must check this as push may panic:
+        // "Panics if the new capacity exceeds isize::MAX bytes."
+        if self.windows.len() + 1 == isize::MAX as usize {
+            return Err(AppErrors::MaxWindowCountReached(isize::MAX as usize));
+        }
+        let app_window = AppWindow::new(Some(render_surface.window_id()), Some(render_surface), 1);
+        self.windows.push(app_window);
+        let app_window = self.windows.last_mut().unwrap();
+        app_window.render();
+        Ok(AppWindowId {
+            index,
+            generation: 1,
+        })
+    }
 }
 
-impl ApplicationHandler<AppEvents> for App {
+impl ApplicationHandler<EventLoopAttributes> for App {
     fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: StartCause) {
         info!("Application received new events with cause {:?}", cause);
         match cause {
@@ -135,10 +225,9 @@ impl ApplicationHandler<AppEvents> for App {
             AppFindWindowResult::FoundButClosing(d) => {
                 match event {
                     WindowEvent::Destroyed => {
-                        self.windows[d.index].0 = None;
+                        self.windows[d.index].id = None;
                         let active_windows = self.count_active_windows();
-                        if (active_windows == 0)
-                        {
+                        if (active_windows == 0) {
                             info!("Last window was destroyed, stopping event loop");
                             event_loop.exit();
                         }
@@ -160,7 +249,7 @@ impl ApplicationHandler<AppEvents> for App {
             WindowEvent::Resized(_) => {}
             WindowEvent::Moved(_) => {}
             WindowEvent::CloseRequested => {
-                self.windows[app_window_id.index].1 = None;
+                self.windows[app_window_id.index].render_surface = None;
             }
             WindowEvent::Destroyed => {}
             WindowEvent::DroppedFile(_) => {}
@@ -202,6 +291,9 @@ impl ApplicationHandler<AppEvents> for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        for window in self.windows.iter_mut() {
+            window.render();
+        }
         info!("Application is waiting for new events");
     }
 
@@ -216,53 +308,4 @@ impl ApplicationHandler<AppEvents> for App {
     fn memory_warning(&mut self, event_loop: &ActiveEventLoop) {
         warn!("Low memory warning was issued, the Application might crash");
     }
-}
-impl App {
-    fn new() -> Self {
-        App {
-            windows: vec![],
-            last_error: None,
-        }
-    }
-
-    fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<AppWindowId, AppErrors> {
-        let attributes = WindowAttributes::default().with_title("slate-ui");
-        let window = match event_loop.create_window(attributes) {
-            Ok(d) => d,
-            Err(e) => return Err(AppErrors::WinitOsError(e)),
-        };
-
-        // Try to reuse old slot
-        let index = self.windows.len();
-        for i in 0..index {
-            match self.windows[i].0 {
-                None => {
-                    let generation = self.windows[i].2 + 1;
-                    self.windows[i] = (Some(window.id()), Some(window), generation);
-                    return Ok(AppWindowId {
-                        index: i,
-                        generation,
-                    });
-                }
-                Some(_) => {}
-            }
-        }
-
-        // Create new slot
-
-        // We must check this as push may panic:
-        // "Panics if the new capacity exceeds isize::MAX bytes."
-        if self.windows.len() + 1 == isize::MAX as usize {
-            return Err(AppErrors::MaxWindowCountReached(isize::MAX as usize));
-        }
-        self.windows.push((Some(window.id()), Some(window), 1));
-        Ok(AppWindowId {
-            index,
-            generation: 1,
-        })
-    }
-}
-
-struct AppWindow {
-    index: usize,
 }

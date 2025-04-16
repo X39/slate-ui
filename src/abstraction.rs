@@ -1,5 +1,21 @@
+use std::error::Error;
+use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::window::WindowId;
 use crate::color::Color;
 use crate::data::Size;
+
+pub trait RenderSurface : Renderer {
+    fn create(
+        event_loop: &ActiveEventLoop,
+    ) -> Result<Box<Self>, Box<dyn Error>>
+    where Self: Sized;
+
+
+    fn window_id(&self) -> WindowId;
+    fn start_rendering(&mut self);
+    fn renderer(&mut self) -> &mut dyn Renderer;
+    fn finish_rendering(&mut self);
+}
 
 pub trait Renderer {
     fn draw_rectangle(&mut self, x: f32, y: f32, width: f32, height: f32, fill: Color);

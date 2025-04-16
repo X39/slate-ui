@@ -75,7 +75,7 @@ impl Component for ScrollBar {
         self.size
     }
 
-    fn render(&self, renderer: &mut Renderer)
+    fn render(&self, renderer: &mut dyn Renderer)
     {
         let thickness = self.render_thickness;
         let bar_length = self.bar_length;

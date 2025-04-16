@@ -6,11 +6,17 @@ edition = "2018"
 
 [features]
 default = ["skia-gl"]
-skia-gl = ["skia-safe", "skia-safe/default", "skia-safe/gl"]
+skia-gl = ["skia-safe", "skia-safe/default", "skia-safe/gl", "glutin", "glutin-winit", "glutin-winit/default"]
 
 [dependencies]
-skia-safe = { version = "0.78.2", optional = true, features = ["default"] }
+# Optional
+skia-safe = { version = "0.80.1", optional = true, features = ["default"] }
+glutin-winit = { version = "0.5.0", optional = true, features = ["default"] }
+glutin = { version = "0.32.1", optional = true, features = ["default"] }
+gl = "0.14.0"
+# Window Management
 winit = {version = "0.30.5"}
+# Other
 config = "0.14.1"
 log = "0.4.22"
 simple_logger = "5.0.0"
